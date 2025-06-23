@@ -47,3 +47,48 @@ export const createShortUrl = async (req, res) => {
     expiry,
   });
 };
+
+export async function getUrlStats(req, res) {
+  const { shortcode } = req.params;
+  let data = [];
+
+  try {
+    const raw = fs.readFileSync(dbPath, "utf-8");
+    data = JSON.parse(raw);
+  } catch (err) {
+    await Log(
+      "backend",
+      "error",
+      "handler",
+      `Failed to read DB: ${err.message}`
+    );
+    return res.status(500).json({ error: "Could not load data" });
+  }
+
+  const entry = data.find((e) => e.shortcode === shortcode);
+  if (!entry) {
+    await Log(
+      "backend",
+      "warn",
+      "handler",
+      `Stats requested for non-existent shortcode: ${shortcode}`
+    );
+    return res.status(404).json({ error: "Shortcode not found" });
+  }
+
+  const response = {
+    originalUrl: entry.url,
+    createdAt: entry.createdAt,
+    expiresAt: entry.expiry,
+    clickCount: entry.clicks.length,
+    clickDetails: entry.clicks.map((click) => ({
+      timestamp: click.timestamp,
+      referrer: click.referrer || "unknown",
+      geoLocation: click.geoLocation || "unknown",
+    })),
+  };
+
+  await Log("backend", "info", "handler", `Fetched stats for ${shortcode}`);
+
+  return res.json(response);
+}
